@@ -1,7 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const fs = require('fs');
-const { execSync } = require('child_process');
+const { spawn } = require('child_process');
 
 const app = express();
 
@@ -67,6 +67,67 @@ app.get('/wc', (req, res) => {
     return res.json({ word_count: wc_count});
 });
 
+async function executeShellCommand(command, limit) {
+  return new Promise((resolve, reject) => {
+    const shell = spawn('bash', ['-c', command]);
+    let stdout = '';
+
+    shell.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    shell.on('error', (error) => {
+      reject(error);
+    });
+
+    shell.on('close', (code) => {
+      if (code !== 0) {
+        reject(`Command exited with code ${code}`);
+        return;
+      }
+
+      // Split the output into lines and remove leading/trailing whitespace
+      const lines = stdout.trim().split('\n');
+
+      // Extract the last 'limit' lines from the output
+      const result = lines.slice(-limit);
+
+      resolve(result);
+    });
+  });
+}
+
+async function getSortedFileCounts(limit, order) {
+  if (order == 'asc') {
+    const command = `cat files/* | tr -s ' ' '\\n' | sort | uniq -c | sort -n | tail -n ${limit}`;
+    const result = await executeShellCommand(command, limit);
+    return result;
+  } else {
+    const command = `cat files/* | tr -s ' ' '\\n' | sort | uniq -c | sort -nr | tail -n ${limit}`;
+    const result = await executeShellCommand(command, limit);
+    return result;
+  }
+}
+
+
+// use spawn instead of execSync for /freq-words
+app.get('/freq-words', async (req, res) => {
+  const limit = parseInt(req.query.limit) || 10;
+  const order = req.query.order || 'asc';
+  getSortedFileCounts(limit, order)
+    .then((result) => {
+      const freqWords = result
+        .map((line) => line.split(' ').slice().join(' ').trim());
+      return res.json({ freq_words: freqWords });
+    })
+    .catch((error) => {
+      console.error(error);
+      return res.json({ error: error.message });
+    });
+});
+
+
+
 app.get('/freq-words', (req, res) => {
   const limit = parseInt(req.query.limit) || 10;
   const order = req.query.order || 'asc';
@@ -78,10 +139,6 @@ app.get('/freq-words', (req, res) => {
   const output = execSync(freqWordsCommand).toString().trim();
   console.log(output);
   return res.json({ freq_words: output});
-//   const freqWords = output
-//     .split('\n')
-//     .map((line) => line.split(' ').slice(1).join(' ').trim());
-//   return res.json({ freq_words: freqWords });
 });
 
 function populateFileStore() {

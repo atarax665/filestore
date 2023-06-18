@@ -2,6 +2,7 @@ const axios = require('axios');
 const FormData = require('form-data');
 const fs = require('fs');
 const { execSync } = require('child_process');
+const { compileFunction } = require('vm');
 
 const SERVER_URL = 'http://localhost:5000';
 
@@ -81,7 +82,13 @@ function frequentWords(limit = 10, order = 'asc') {
     .get(`${SERVER_URL}/freq-words?limit=${limit}&order=${order}`)
     .then((response) => {
       console.log(`Most frequent words (limit=${limit}, order=${order}):`);
-      console.log(response.data.freq_words);
+      let freq_words = response.data.freq_words;
+      freq_dict = {};
+      for (let i = 0; i < freq_words.length; i++) {
+        let words = freq_words[i].split(' ');
+        freq_dict[words[1]] = words[0];
+      }
+      console.log(freq_dict);
     })
     .catch((error) => {
       console.error('Error:', error.response.data.error);
@@ -122,7 +129,9 @@ function parseArguments() {
   }
 }
 
+function terminalDesign() {
+    console.log("Welcome to the FileStore");
+    
+
 parseArguments();
 
-// Asc cat * | tr -s ' ' '\n' | sort | uniq -c | sort -n | tail -n 10
-// Desc cat files/* | tr -s ' ' '\n' | sort | uniq -c | sort -nr | head -n 10
